@@ -1,0 +1,100 @@
+---
+title: "Practical Machine Learning Prediction Assignment"
+author: "Campbell Easton"
+date: "8 February 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Background
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. 
+
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project,data was collected from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways (A,B,C,D and E). More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).
+
+The goal of this project was to build a predictive model which was able to determine from the accelerometer data the "classe" in which the participants are performing the exercise.
+
+##Loading and preprocessing the Data 
+
+Initially training Data was downloaded and the .csv file read into R.
+```{r}
+fileURL<-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+
+if (!file.exists("./data/pml-training.csv")){
+       download.file( fileURL,"./data/pml-training.csv")
+}
+
+devTrain<-read.csv("./data/pml-training.csv", na.strings = c("", "NA"))
+
+dim(devTrain)
+```
+
+Once loaded columns which contained only NA values, meta-data or time were removed as they were not required for building the model.
+
+```{r}
+#remove columns that are NA
+devTrain<-devTrain[,colSums(is.na(devTrain))==0]
+
+#Get rid of columns not linked to classe prediction
+notin<- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2"
+          ,"cvtd_timestamp", "new_window", "num_window")
+
+devTrain<-devTrain[,!(names(devTrain) %in% notin)]
+dim(devTrain)
+```
+We now have a data frame with 19622 observations and 53 variables which are ready to be partitioned for training, testing and cross validation.
+
+## Partitioning data into training and test sets for cross validation.
+
+A 7:3 training to test ratio was used for this.
+```{r}
+library(caret)
+set.seed(12345)
+inTrain <- createDataPartition(y=devTrain$classe, p=0.7, list=FALSE)
+training <- devTrain[inTrain,]
+testing <- devTrain[-inTrain,]
+```
+
+## Building Random Forest Model
+
+A random forest model was used on the training subset using all remaining 52 variables to predict classe classification. This took a few minutes as so many variables were used. This time could be reduced by reviewing the correlations and picking out unnecessary variables or performing Principle Components Analysis/ Factor Analysis to reduce variables.
+```{r, cache=TRUE, results = 'hide'}
+set.seed(1234)
+model <- train(classe ~. , data = training, method = "rf")
+```
+
+##prediction with Random forest model with Testing subset for Cross validation/Out of Sample Error prediction.
+
+Model was first used on the testing subset to allow cross validation
+```{r, results = 'hide'}
+results1<-predict(model, newdata = testing)
+```
+A confusion Martix was created to review predicted results vs actual results
+```{r}
+confusionMatrix(results1,testing$classe)
+```
+The confusion matrix shows model has an accuracy of 0.9895. Out of Sample Error is defined as 1-Accuracy so we can say that we would expect and out of sample error rate of 0.01 or approximately 1 miss classification in 100 samples which for our requirements is an excellent result.
+
+## Predicting with Testing data 
+
+We can now download the actual test data for the Quiz portion of the assignment. This new test data will need to be pre-screened as per the training data to remove unnecessary columns. 
+
+```{r}
+devTest<-read.csv("./data/pml-testing.csv", na.strings = c("", "NA"))
+
+devTest<-devTest[,colSums(is.na(devTest))==0]
+
+notin<- c("X","user_name","raw_timestamp_part_1","raw_timestamp_part_2"
+          ,"cvtd_timestamp", "new_window", "num_window")
+
+devTest<-devTest[,!(names(devTest) %in% notin)]
+```
+
+we can then predict using the our Random Forest model on the test dataset.
+```{r}
+ predict(model,newdata=devTest)
+```
+As we would expect from our out of sample error rate we have correctly classified these 20 samples. 
